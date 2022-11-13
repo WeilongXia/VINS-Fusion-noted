@@ -1,0 +1,28 @@
+{
+  "configurations": [
+    {
+      "browse": {
+        "databaseFilename": "${default}",
+        "limitSymbolsToIncludedHeaders": false
+      },
+      "includePath": [
+        "/home/xwl/catkin_ws/devel/include/**",
+        "/opt/ros/noetic/include/**",
+        "/home/xwl/catkin_ws/src/ORB3_localization/include/**",
+        "/home/xwl/catkin_ws/src/VINS-Mono/camera_model/include/**",
+        "/home/xwl/catkin_ws/src/VINS-Fusion-noted/camera_models/include/**",
+        "/home/xwl/catkin_ws/src/code_utils/include/**",
+        "/home/xwl/catkin_ws/src/msckf_vio/include/**",
+        "/home/xwl/catkin_ws/src/mv_driver/include/**",
+        "/home/xwl/catkin_ws/src/realsense-ros/realsense2_camera/include/**",
+        "/usr/include/**"
+      ],
+      "name": "ROS",
+      "intelliSenseMode": "gcc-x64",
+      "compilerPath": "/usr/bin/gcc",
+      "cStandard": "gnu11",
+      "cppStandard": "c++14"
+    }
+  ],
+  "version": 4
+}
