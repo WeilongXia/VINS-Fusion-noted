@@ -29,8 +29,8 @@ queue<sensor_msgs::ImageConstPtr> img0_buf;
 queue<sensor_msgs::ImageConstPtr> img1_buf;
 std::mutex m_buf;
 
-bool first_receive_gt = true;
-Eigen::Matrix4d gt_to_estimate;
+// bool first_receive_gt = true;
+// Eigen::Matrix4d gt_to_estimate;
 
 void img0_callback(const sensor_msgs::ImageConstPtr &img_msg)
 {
@@ -155,6 +155,9 @@ void imu_callback(const sensor_msgs::ImuConstPtr &imu_msg)
 
 void feature_callback(const sensor_msgs::PointCloudConstPtr &feature_msg)
 {
+    // for each feature points, it can be observed by sevarel cameras.
+    // map.key is the feature id, map.value is the camera id and the
+    // pixel coordinate in the correspond camera.
     map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> featureFrame;
     for (unsigned int i = 0; i < feature_msg->points.size(); i++)
     {
@@ -175,6 +178,7 @@ void feature_callback(const sensor_msgs::PointCloudConstPtr &feature_msg)
             pts_gt[feature_id] = Eigen::Vector3d(gx, gy, gz);
             // printf("receive pts gt %d %f %f %f\n", feature_id, gx, gy, gz);
         }
+        // x, y, z is in the normalized plane of the camera.
         ROS_ASSERT(z == 1);
         Eigen::Matrix<double, 7, 1> xyz_uv_velocity;
         xyz_uv_velocity << x, y, z, p_u, p_v, velocity_x, velocity_y;
@@ -226,68 +230,68 @@ void cam_switch_callback(const std_msgs::BoolConstPtr &switch_msg)
     return;
 }
 
-void gt_pub_callback(const nav_msgs::Odometry::ConstPtr &ground_truth)
-{
-    if (first_receive_gt)
-    {
-        Eigen::Matrix4d estimate_to_gt;
-        estimate_to_gt.setIdentity(4, 4);
-        Eigen::Quaterniond q(ground_truth->pose.pose.orientation.w, ground_truth->pose.pose.orientation.x,
-                             ground_truth->pose.pose.orientation.y, ground_truth->pose.pose.orientation.z);
-        estimate_to_gt.block<3, 3>(0, 0) = q.toRotationMatrix();
-        estimate_to_gt.block<3, 1>(0, 3) << ground_truth->pose.pose.position.x, ground_truth->pose.pose.position.y,
-            ground_truth->pose.pose.position.z;
-        gt_to_estimate = estimate_to_gt.inverse();
+// void gt_pub_callback(const nav_msgs::Odometry::ConstPtr &ground_truth)
+// {
+//     if (first_receive_gt)
+//     {
+//         Eigen::Matrix4d estimate_to_gt;
+//         estimate_to_gt.setIdentity(4, 4);
+//         Eigen::Quaterniond q(ground_truth->pose.pose.orientation.w, ground_truth->pose.pose.orientation.x,
+//                              ground_truth->pose.pose.orientation.y, ground_truth->pose.pose.orientation.z);
+//         estimate_to_gt.block<3, 3>(0, 0) = q.toRotationMatrix();
+//         estimate_to_gt.block<3, 1>(0, 3) << ground_truth->pose.pose.position.x, ground_truth->pose.pose.position.y,
+//             ground_truth->pose.pose.position.z;
+//         gt_to_estimate = estimate_to_gt.inverse();
 
-        Eigen::Matrix4d gt_transformed = gt_to_estimate * estimate_to_gt;
+//         Eigen::Matrix4d gt_transformed = gt_to_estimate * estimate_to_gt;
 
-        std::cout << "estimate_to_gt: " << estimate_to_gt << std::endl;
-        std::cout << "gt_to_estimate: " << gt_to_estimate << std::endl;
-        std::cout << "gt_transformed: " << gt_transformed << std::endl;
+//         std::cout << "estimate_to_gt: " << estimate_to_gt << std::endl;
+//         std::cout << "gt_to_estimate: " << gt_to_estimate << std::endl;
+//         std::cout << "gt_transformed: " << gt_transformed << std::endl;
 
-        Eigen::Quaterniond q_gt_estimate(gt_transformed.block<3, 3>(0, 0));
+//         Eigen::Quaterniond q_gt_estimate(gt_transformed.block<3, 3>(0, 0));
 
-        nav_msgs::Odometry gt_pub;
-        gt_pub.pose.pose.position.x = gt_transformed(0, 3);
-        gt_pub.pose.pose.position.y = gt_transformed(1, 3);
-        gt_pub.pose.pose.position.z = gt_transformed(2, 3);
-        gt_pub.pose.pose.orientation.w = q_gt_estimate.w();
-        gt_pub.pose.pose.orientation.x = q_gt_estimate.x();
-        gt_pub.pose.pose.orientation.y = q_gt_estimate.y();
-        gt_pub.pose.pose.orientation.z = q_gt_estimate.z();
+//         nav_msgs::Odometry gt_pub;
+//         gt_pub.pose.pose.position.x = gt_transformed(0, 3);
+//         gt_pub.pose.pose.position.y = gt_transformed(1, 3);
+//         gt_pub.pose.pose.position.z = gt_transformed(2, 3);
+//         gt_pub.pose.pose.orientation.w = q_gt_estimate.w();
+//         gt_pub.pose.pose.orientation.x = q_gt_estimate.x();
+//         gt_pub.pose.pose.orientation.y = q_gt_estimate.y();
+//         gt_pub.pose.pose.orientation.z = q_gt_estimate.z();
 
-        // 发布对齐好的真值
-        pubGt(gt_pub);
+//         // publish ground_truth aligned
+//         pubGt(gt_pub);
 
-        first_receive_gt = false;
-    }
-    else
-    {
-        Eigen::Matrix4d estimate_to_gt;
-        estimate_to_gt.setIdentity(4, 4);
-        Eigen::Quaterniond q(ground_truth->pose.pose.orientation.w, ground_truth->pose.pose.orientation.x,
-                             ground_truth->pose.pose.orientation.y, ground_truth->pose.pose.orientation.z);
-        estimate_to_gt.block<3, 3>(0, 0) = q.toRotationMatrix();
-        estimate_to_gt.block<3, 1>(0, 3) << ground_truth->pose.pose.position.x, ground_truth->pose.pose.position.y,
-            ground_truth->pose.pose.position.z;
+//         first_receive_gt = false;
+//     }
+//     else
+//     {
+//         Eigen::Matrix4d estimate_to_gt;
+//         estimate_to_gt.setIdentity(4, 4);
+//         Eigen::Quaterniond q(ground_truth->pose.pose.orientation.w, ground_truth->pose.pose.orientation.x,
+//                              ground_truth->pose.pose.orientation.y, ground_truth->pose.pose.orientation.z);
+//         estimate_to_gt.block<3, 3>(0, 0) = q.toRotationMatrix();
+//         estimate_to_gt.block<3, 1>(0, 3) << ground_truth->pose.pose.position.x, ground_truth->pose.pose.position.y,
+//             ground_truth->pose.pose.position.z;
 
-        Eigen::Matrix4d gt_transformed = gt_to_estimate * estimate_to_gt;
+//         Eigen::Matrix4d gt_transformed = gt_to_estimate * estimate_to_gt;
 
-        Eigen::Quaterniond q_gt_estimate(gt_transformed.block<3, 3>(0, 0));
+//         Eigen::Quaterniond q_gt_estimate(gt_transformed.block<3, 3>(0, 0));
 
-        nav_msgs::Odometry gt_pub;
-        gt_pub.pose.pose.position.x = gt_transformed(0, 3);
-        gt_pub.pose.pose.position.y = gt_transformed(1, 3);
-        gt_pub.pose.pose.position.z = gt_transformed(2, 3);
-        gt_pub.pose.pose.orientation.w = q_gt_estimate.w();
-        gt_pub.pose.pose.orientation.x = q_gt_estimate.x();
-        gt_pub.pose.pose.orientation.y = q_gt_estimate.y();
-        gt_pub.pose.pose.orientation.z = q_gt_estimate.z();
+//         nav_msgs::Odometry gt_pub;
+//         gt_pub.pose.pose.position.x = gt_transformed(0, 3);
+//         gt_pub.pose.pose.position.y = gt_transformed(1, 3);
+//         gt_pub.pose.pose.position.z = gt_transformed(2, 3);
+//         gt_pub.pose.pose.orientation.w = q_gt_estimate.w();
+//         gt_pub.pose.pose.orientation.x = q_gt_estimate.x();
+//         gt_pub.pose.pose.orientation.y = q_gt_estimate.y();
+//         gt_pub.pose.pose.orientation.z = q_gt_estimate.z();
 
-        // 发布对齐好的真值
-        pubGt(gt_pub);
-    }
-}
+//         // publish ground_truth aligned
+//         pubGt(gt_pub);
+//     }
+// }
 
 int main(int argc, char **argv)
 {
@@ -333,8 +337,8 @@ int main(int argc, char **argv)
     ros::Subscriber sub_imu_switch = n.subscribe("/vins_imu_switch", 100, imu_switch_callback);
     ros::Subscriber sub_cam_switch = n.subscribe("/vins_cam_switch", 100, cam_switch_callback);
 
-    //订阅groundtruth，和估计值对齐并发布
-    ros::Subscriber sub_ground_truth = n.subscribe("/drone1/ground_truth/ground_truth_odom", 100, gt_pub_callback);
+    // subscribe groundtruth，and align it with estimated pose.
+    // ros::Subscriber sub_ground_truth = n.subscribe("/drone1/ground_truth/ground_truth_odom", 100, gt_pub_callback);
 
     std::thread sync_thread{sync_process};
     ros::spin();
