@@ -47,6 +47,8 @@ int FeatureManager::getFeatureCount()
     return cnt;
 }
 
+// frame_count: the index of current frame in the sliding window
+// image: features in current frame (featureId, cameraId, feature)
 bool FeatureManager::addFeatureCheckParallax(int frame_count,
                                              const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image,
                                              double td)

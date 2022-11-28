@@ -23,8 +23,10 @@
 
 Estimator estimator;
 
+// imu_buf and feature_buf are not used
 queue<sensor_msgs::ImuConstPtr> imu_buf;
 queue<sensor_msgs::PointCloudConstPtr> feature_buf;
+
 queue<sensor_msgs::ImageConstPtr> img0_buf;
 queue<sensor_msgs::ImageConstPtr> img1_buf;
 std::mutex m_buf;
@@ -69,6 +71,7 @@ cv::Mat getImageFromMsg(const sensor_msgs::ImageConstPtr &img_msg)
 }
 
 // extract images with same timestamp from two topics
+// the duration threshold is 0.003s
 void sync_process()
 {
     while (1)
@@ -84,6 +87,8 @@ void sync_process()
                 double time0 = img0_buf.front()->header.stamp.toSec();
                 double time1 = img1_buf.front()->header.stamp.toSec();
                 // 0.003s sync tolerance
+                // the older the frame is, the smaller it's timestamp will be
+                // queue: first in first out
                 if (time0 < time1 - 0.003)
                 {
                     img0_buf.pop();
@@ -155,9 +160,10 @@ void imu_callback(const sensor_msgs::ImuConstPtr &imu_msg)
 
 void feature_callback(const sensor_msgs::PointCloudConstPtr &feature_msg)
 {
-    // for each feature points, it can be observed by sevarel cameras.
+    // for each feature points, it can be observed by several cameras.
     // map.key is the feature id, map.value is the camera id and the
     // pixel coordinate in the correspond camera.
+    // feature id, camera id, normalized coordinate-pixel coordinate-xy velocity
     map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> featureFrame;
     for (unsigned int i = 0; i < feature_msg->points.size(); i++)
     {

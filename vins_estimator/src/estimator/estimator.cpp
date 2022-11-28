@@ -113,6 +113,7 @@ void Estimator::setParameter()
     if (MULTIPLE_THREAD && !initThreadFlag)
     {
         initThreadFlag = true;
+        // copy construct a process thread
         processThread = std::thread(&Estimator::processMeasurements, this);
     }
     mProcess.unlock();
@@ -156,6 +157,9 @@ void Estimator::changeSensorType(int use_imu, int use_stereo)
     }
 }
 
+// input: the newest synchronized images.
+// featureTracker extracts features in current frame,
+// add them to featureBuf, which will be used by processMeasurements()
 void Estimator::inputImage(double t, const cv::Mat &_img, const cv::Mat &_img1)
 {
     inputImageCnt++;
@@ -179,6 +183,7 @@ void Estimator::inputImage(double t, const cv::Mat &_img, const cv::Mat &_img1)
         if (inputImageCnt % 2 == 0)
         {
             mBuf.lock();
+            // add featureFrame to featureBuf, used by processMeasurements()
             featureBuf.push(make_pair(t, featureFrame));
             mBuf.unlock();
         }
@@ -189,6 +194,8 @@ void Estimator::inputImage(double t, const cv::Mat &_img, const cv::Mat &_img1)
         featureBuf.push(make_pair(t, featureFrame));
         mBuf.unlock();
         TicToc processTime;
+        // processMeasurements() uses all the measurements
+        // including image feature points, imu data
         processMeasurements();
         printf("process time: %f\n", processTime.toc());
     }
@@ -202,9 +209,12 @@ void Estimator::inputIMU(double t, const Vector3d &linearAcceleration, const Vec
     // printf("input imu with time %f \n", t);
     mBuf.unlock();
 
+    // When the system finishes initialization, and it's in
+    // non-linear optimization stage.
     if (solver_flag == NON_LINEAR)
     {
         mPropagate.lock();
+        // use mid-point integration to predict pose and velocity.
         fastPredictIMU(t, linearAcceleration, angularVelocity);
         pubLatestOdometry(latest_P, latest_Q, latest_V, t);
         mPropagate.unlock();
@@ -217,10 +227,13 @@ void Estimator::inputFeature(double t, const map<int, vector<pair<int, Eigen::Ma
     featureBuf.push(make_pair(t, featureFrame));
     mBuf.unlock();
 
+    // why not MULTIPLE_THREAD?
     if (!MULTIPLE_THREAD)
         processMeasurements();
 }
 
+// accVector contains linear acceleration between previous image and current image.
+// gyrVector contains angular velocity between previous image and current image.
 bool Estimator::getIMUInterval(double t0, double t1, vector<pair<double, Eigen::Vector3d>> &accVector,
                                vector<pair<double, Eigen::Vector3d>> &gyrVector)
 {
@@ -258,6 +271,9 @@ bool Estimator::getIMUInterval(double t0, double t1, vector<pair<double, Eigen::
 
 bool Estimator::IMUAvailable(double t)
 {
+    // accBuf is a queue, the element of it's back is the newest one
+    // t < accBuf.back().first means we can find an element in accBuf
+    // which is sampled at t timestamp
     if (!accBuf.empty() && t <= accBuf.back().first)
         return true;
     else
@@ -269,6 +285,7 @@ void Estimator::processMeasurements()
     while (1)
     {
         // printf("process measurments\n");
+        // feature contains timestamp of the frame and the featureFrame.
         pair<double, map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>>> feature;
         vector<pair<double, Eigen::Vector3d>> accVector, gyrVector;
         if (!featureBuf.empty())
@@ -277,6 +294,10 @@ void Estimator::processMeasurements()
             curTime = feature.first + td;
             while (1)
             {
+                // if we don't use IMU or there is an IMU data cooresponding to
+                // current timestamp, we jump out.
+                // else (use IMU and no cooresponding IMU data exists), waiting
+                // for 5 ms.
                 if ((!USE_IMU || IMUAvailable(feature.first + td)))
                     break;
                 else
@@ -290,13 +311,17 @@ void Estimator::processMeasurements()
             }
             mBuf.lock();
             if (USE_IMU)
+            {
+                // get IMU measurements between last and current feature frame
                 getIMUInterval(prevTime, curTime, accVector, gyrVector);
+            }
 
             featureBuf.pop();
             mBuf.unlock();
 
             if (USE_IMU)
             {
+                // The first IMU pose initialization.
                 if (!initFirstPoseFlag)
                     initFirstIMUPose(accVector);
                 for (size_t i = 0; i < accVector.size(); i++)
@@ -338,6 +363,10 @@ void Estimator::processMeasurements()
     }
 }
 
+// Align the direction of gravitational acceleration with the direction of
+// acceleration at the initial moment to obtain a rotation so that the z-axis
+// of the initial IMU points to the direction of gravity.
+// Set the yaw angle to 0
 void Estimator::initFirstIMUPose(vector<pair<double, Eigen::Vector3d>> &accVector)
 {
     printf("init first imu pose\n");
@@ -367,6 +396,9 @@ void Estimator::initFirstPose(Eigen::Vector3d p, Eigen::Matrix3d r)
     initR = r;
 }
 
+// Using the pose of the previous image frame, the IMU data between the previous image frame
+// and the current image frame, the integral calculation is used to obtain the pose of the
+// current image frame.
 void Estimator::processIMU(double t, double dt, const Vector3d &linear_acceleration, const Vector3d &angular_velocity)
 {
     if (!first_imu)
@@ -378,10 +410,12 @@ void Estimator::processIMU(double t, double dt, const Vector3d &linear_accelerat
 
     if (!pre_integrations[frame_count])
     {
+        // create a new pre-integration object
         pre_integrations[frame_count] = new IntegrationBase{acc_0, gyr_0, Bas[frame_count], Bgs[frame_count]};
     }
     if (frame_count != 0)
     {
+        // pre_integration has been done during push_back
         pre_integrations[frame_count]->push_back(dt, linear_acceleration, angular_velocity);
         // if(solver_flag != NON_LINEAR)
         tmp_pre_integration->push_back(dt, linear_acceleration, angular_velocity);
@@ -393,6 +427,7 @@ void Estimator::processIMU(double t, double dt, const Vector3d &linear_accelerat
         int j = frame_count;
         Vector3d un_acc_0 = Rs[j] * (acc_0 - Bas[j]) - g;
         Vector3d un_gyr = 0.5 * (gyr_0 + angular_velocity) - Bgs[j];
+        // update rotation firstly
         Rs[j] *= Utility::deltaQ(un_gyr * dt).toRotationMatrix();
         Vector3d un_acc_1 = Rs[j] * (linear_acceleration - Bas[j]) - g;
         Vector3d un_acc = 0.5 * (un_acc_0 + un_acc_1);
@@ -407,6 +442,8 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
 {
     ROS_DEBUG("new image coming ------------------------------------------");
     ROS_DEBUG("Adding feature points %lu", image.size());
+    // check if there is enough parallax between current frame and second newest frame
+    // if is, margin the oldest frame; if not, margin the second newest frame
     if (f_manager.addFeatureCheckParallax(frame_count, image, td))
     {
         marginalization_flag = MARGIN_OLD;
@@ -424,10 +461,17 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
     Headers[frame_count] = header;
 
     ImageFrame imageframe(image, header);
+    // pre-integration of the current frame (IMU pre-integration between the
+    // previous frame and the current frame)
     imageframe.pre_integration = tmp_pre_integration;
     all_image_frame.insert(make_pair(header, imageframe));
+    // reset pre-integration
     tmp_pre_integration = new IntegrationBase{acc_0, gyr_0, Bas[frame_count], Bgs[frame_count]};
 
+    // calibrate rotation between the camera and imu online.
+    // imu pre_integration get a delta_q, and use epipolar constraint to
+    // get another delta_q_prime, get the best rotation through least squre
+    // estimation in CalibrationExRotation()
     if (ESTIMATE_EXTRINSIC == 2)
     {
         ROS_INFO("calibrating extrinsic param, rotation movement is needed");
@@ -447,6 +491,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
         }
     }
 
+    // initilization stage of the system
     if (solver_flag == INITIAL)
     {
         // monocular + IMU initilization
@@ -476,7 +521,9 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
         // stereo + IMU initilization
         if (STEREO && USE_IMU)
         {
+            // get current pose by 3D-2D PnP
             f_manager.initFramePoseByPnP(frame_count, Ps, Rs, tic, ric);
+            // get the coordinate of the features in current frame
             f_manager.triangulate(frame_count, Ps, Rs, tic, ric);
             if (frame_count == WINDOW_SIZE)
             {
@@ -522,6 +569,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
         {
             frame_count++;
             int prev_frame = frame_count - 1;
+            // let the state of the previous frame to be prior of the current frame
             Ps[frame_count] = Ps[prev_frame];
             Vs[frame_count] = Vs[prev_frame];
             Rs[frame_count] = Rs[prev_frame];
@@ -532,6 +580,8 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
     else
     {
         TicToc t_solve;
+        // if not use imu, we use 3D-2D PnP to obtain initial pose, else,
+        // we can use IMU motion and measure model to get initial pose
         if (!USE_IMU)
             f_manager.initFramePoseByPnP(frame_count, Ps, Rs, tic, ric);
         f_manager.triangulate(frame_count, Ps, Rs, tic, ric);
@@ -542,6 +592,9 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
         if (!MULTIPLE_THREAD)
         {
             featureTracker.removeOutliers(removeIndex);
+            // we have previous and current pose, so we can predict next pose,
+            // use the estimated next pose to get the initial feature coordinate
+            // in the camera frame
             predictPtsInNextFrame();
         }
 
@@ -807,6 +860,7 @@ bool Estimator::relativePose(Matrix3d &relative_R, Vector3d &relative_T, int &l)
     return false;
 }
 
+// fill in para_Pose, para_SpeedBias, para_Ex_Pose, para_Feature and para_Td
 void Estimator::vector2double()
 {
     for (int i = 0; i <= WINDOW_SIZE; i++)
@@ -820,6 +874,7 @@ void Estimator::vector2double()
         para_Pose[i][5] = q.z();
         para_Pose[i][6] = q.w();
 
+        // estimate bg, ba, velocity when using IMU
         if (USE_IMU)
         {
             para_SpeedBias[i][0] = Vs[i].x();
@@ -856,6 +911,7 @@ void Estimator::vector2double()
         para_Ex_Pose[i][6] = q.w();
     }
 
+    // get inverse-depth of the features
     VectorXd dep = f_manager.getDepthVector();
     for (int i = 0; i < f_manager.getFeatureCount(); i++)
         para_Feature[i][0] = dep(i);
@@ -1566,6 +1622,7 @@ void Estimator::fastPredictIMU(double t, Eigen::Vector3d linear_acceleration, Ei
 {
     double dt = t - latest_time;
     latest_time = t;
+    // use mid-point integration
     Eigen::Vector3d un_acc_0 = latest_Q * (latest_acc_0 - latest_Ba) - g;
     Eigen::Vector3d un_gyr = 0.5 * (latest_gyr_0 + angular_velocity) - latest_Bg;
     latest_Q = latest_Q * Utility::deltaQ(un_gyr * dt);
@@ -1573,6 +1630,7 @@ void Estimator::fastPredictIMU(double t, Eigen::Vector3d linear_acceleration, Ei
     Eigen::Vector3d un_acc = 0.5 * (un_acc_0 + un_acc_1);
     latest_P = latest_P + dt * latest_V + 0.5 * dt * dt * un_acc;
     latest_V = latest_V + dt * un_acc;
+    // latest_acc_0 and latest_gyr_0 is the last imu measurement
     latest_acc_0 = linear_acceleration;
     latest_gyr_0 = angular_velocity;
 }
