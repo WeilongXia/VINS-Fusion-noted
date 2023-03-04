@@ -21,6 +21,7 @@
 #include <stdio.h>
 #include <thread>
 
+// 全局变量，生命周期直至整个程序结束
 Estimator estimator;
 
 // imu_buf and feature_buf are not used
