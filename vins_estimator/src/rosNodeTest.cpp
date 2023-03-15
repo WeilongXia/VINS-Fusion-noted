@@ -13,6 +13,8 @@
 #include "estimator/parameters.h"
 #include "utility/visualization.h"
 #include <cv_bridge/cv_bridge.h>
+#include <fstream>
+#include <iomanip>
 #include <map>
 #include <mutex>
 #include <opencv2/opencv.hpp>
@@ -20,6 +22,7 @@
 #include <ros/ros.h>
 #include <stdio.h>
 #include <thread>
+// #include <time.h>
 
 // 全局变量，生命周期直至整个程序结束
 Estimator estimator;
@@ -32,8 +35,71 @@ queue<sensor_msgs::ImageConstPtr> img0_buf;
 queue<sensor_msgs::ImageConstPtr> img1_buf;
 std::mutex m_buf;
 
+// int cnt_pose = 0;
+// int cnt_pic = 0;
+// ros::Subscriber dense_sub;
+// ros::Subscriber rbg_sub;
+// ros::Subscriber pose_sub;
+// ofstream pose_txt_file;
+// std::mutex save_buf;
+// cv::Mat dense_img;
+// double x, y, z, qx, qy, qz, qw;
+
 // bool first_receive_gt = true;
 // Eigen::Matrix4d gt_to_estimate;
+
+// void rgb_callback(const sensor_msgs::ImageConstPtr &rgb_msg)
+// {
+//     save_buf.lock();
+//     cnt_pic++;
+//     if (cnt_pic % 180 == 0)
+//     {
+//         cv_bridge::CvImagePtr cv_ptr;
+//         cv_ptr = cv_bridge::toCvCopy(rgb_msg, sensor_msgs::image_encodings::BGR8);
+//         cv::imwrite("/home/xwl/catkin_ws/src/VINS-Fusion-noted/data/color/" + to_string(cnt_pic / 180) + ".png",
+//                     cv_ptr->image);
+//         cv::imwrite("/home/xwl/catkin_ws/src/VINS-Fusion-noted/data/depth/" + to_string(cnt_pic / 180) + ".png",
+//                     dense_img);
+//         pose_txt_file << x << setprecision(4) << "  " << y << setprecision(4) << "  " << z << setprecision(4) << "  "
+//                       << qx << setprecision(4) << "  " << qy << setprecision(4) << "  " << qz << setprecision(4) << "
+//                       "
+//                       << qw << std::endl;
+//     }
+//     save_buf.unlock();
+// }
+
+// void dense_callback(const sensor_msgs::ImageConstPtr &dense_msg)
+// {
+//     // if (cnt_pic % 180 == 0)
+//     // {
+//     cv_bridge::CvImagePtr cv_ptr;
+//     cv_ptr = cv_bridge::toCvCopy(dense_msg, sensor_msgs::image_encodings::TYPE_16UC1);
+//     dense_img = cv_ptr->image;
+//     // cv::imwrite("/home/xwl/catkin_ws/src/VINS-Fusion-noted/data/depth/" + to_string(cnt_pic / 180) + ".png",
+//     // cv_ptr->image);
+//     // }
+// }
+
+// void pose_callback(const nav_msgs::OdometryConstPtr &pose_msg)
+// {
+//     // cnt_pose++;
+//     // if (cnt_pic % 90 == 0)
+//     // {
+//     x = pose_msg->pose.pose.position.x;
+//     y = pose_msg->pose.pose.position.y;
+//     z = pose_msg->pose.pose.position.z;
+//     qx = pose_msg->pose.pose.orientation.x;
+//     qy = pose_msg->pose.pose.orientation.y;
+//     qz = pose_msg->pose.pose.orientation.z;
+//     qw = pose_msg->pose.pose.orientation.w;
+//     // pose_txt_file << pose_msg->pose.pose.position.x << setprecision(4) << "  " << pose_msg->pose.pose.position.y
+//     //               << setprecision(4) << "  " << pose_msg->pose.pose.position.z << setprecision(4) << "  "
+//     //               << pose_msg->pose.pose.orientation.x << setprecision(4) << "  " <<
+//     //               pose_msg->pose.pose.orientation.y
+//     //               << setprecision(4) << "  " << pose_msg->pose.pose.orientation.z << setprecision(4) << "  "
+//     //               << pose_msg->pose.pose.orientation.w << std::endl;
+//     // }
+// }
 
 void img0_callback(const sensor_msgs::ImageConstPtr &img_msg)
 {
@@ -344,11 +410,20 @@ int main(int argc, char **argv)
     ros::Subscriber sub_imu_switch = n.subscribe("/vins_imu_switch", 100, imu_switch_callback);
     ros::Subscriber sub_cam_switch = n.subscribe("/vins_cam_switch", 100, cam_switch_callback);
 
+    // rbg_sub = n.subscribe("/camera/color/image_raw", 100, rgb_callback);
+    // dense_sub = n.subscribe("/camera/depth/image_rect_raw", 100, dense_callback);
+    // pose_sub = n.subscribe("/vins_estimator/odometry", 100, pose_callback);
+    // pose_txt_file.open("/home/xwl/catkin_ws/src/VINS-Fusion-noted/data/pose.txt", ios::out | ios::trunc);
+    // pose_txt_file << fixed;
+
     // subscribe groundtruth，and align it with estimated pose.
     // ros::Subscriber sub_ground_truth = n.subscribe("/drone1/ground_truth/ground_truth_odom", 100, gt_pub_callback);
 
     std::thread sync_thread{sync_process};
     ros::spin();
+
+    // pose_txt_file.close();
+    // std::cout << "finish" << std::endl;
 
     return 0;
 }
