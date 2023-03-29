@@ -171,7 +171,7 @@ void Estimator::inputImage(double t, const cv::Mat &_img, const cv::Mat &_img1)
         featureFrame = featureTracker.trackImage(t, _img);
     else
         featureFrame = featureTracker.trackImage(t, _img, _img1);
-    // printf("featureTracker time: %f\n", featureTrackerTime.toc());
+    printf("featureTracker time: %f\n", featureTrackerTime.toc());
 
     if (SHOW_TRACK)
     {
@@ -592,7 +592,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
         f_manager.removeOutlier(removeIndex);
         if (!MULTIPLE_THREAD)
         {
-            featureTracker.removeOutliers(removeIndex);
+            // featureTracker.removeOutliers(removeIndex);
             // we have previous and current pose, so we can predict next pose,
             // use the estimated next pose to get the initial feature coordinate
             // in the camera frame

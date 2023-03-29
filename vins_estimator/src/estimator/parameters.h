@@ -1,22 +1,22 @@
 /*******************************************************
  * Copyright (C) 2019, Aerial Robotics Group, Hong Kong University of Science and Technology
- * 
+ *
  * This file is part of VINS.
- * 
+ *
  * Licensed under the GNU General Public License v3.0;
  * you may not use this file except in compliance with the License.
  *******************************************************/
 
 #pragma once
 
-#include <ros/ros.h>
-#include <vector>
-#include <eigen3/Eigen/Dense>
 #include "../utility/utility.h"
-#include <opencv2/opencv.hpp>
-#include <opencv2/core/eigen.hpp>
+#include <eigen3/Eigen/Dense>
 #include <fstream>
 #include <map>
+#include <opencv2/core/eigen.hpp>
+#include <opencv2/opencv.hpp>
+#include <ros/ros.h>
+#include <vector>
 
 using namespace std;
 
@@ -42,6 +42,7 @@ extern double SOLVER_TIME;
 extern int NUM_ITERATIONS;
 extern std::string EX_CALIB_RESULT_PATH;
 extern std::string VINS_RESULT_PATH;
+extern std::string MOCAP_RESULT_PATH;
 extern std::string OUTPUT_FOLDER;
 extern std::string IMU_TOPIC;
 extern double TD;
