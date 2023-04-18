@@ -774,6 +774,7 @@ bool Estimator::visualInitialAlign()
     TicToc t_g;
     VectorXd x;
     // solve scale
+    // 计算陀螺仪偏置，尺度，重力加速度和速度
     bool result = VisualIMUAlignment(all_image_frame, Bgs, g, x);
     if (!result)
     {
@@ -782,6 +783,7 @@ bool Estimator::visualInitialAlign()
     }
 
     // change state
+    // 将all_image_frame中的关键帧位姿取出，并标记为关键帧
     for (int i = 0; i <= frame_count; i++)
     {
         Matrix3d Ri = all_image_frame[Headers[i]].R;
@@ -791,17 +793,25 @@ bool Estimator::visualInitialAlign()
         all_image_frame[Headers[i]].is_key_frame = true;
     }
 
+    // 重新计算关键帧的IMU预积分
     double s = (x.tail<1>())(0);
     for (int i = 0; i <= WINDOW_SIZE; i++)
     {
         pre_integrations[i]->repropagate(Vector3d::Zero(), Bgs[i]);
     }
+
+    // 将Ps、Vs进行尺度s缩放
     for (int i = frame_count; i >= 0; i--)
+    {
+        // 得到了以第L帧坐标系为世界坐标系，在IMU坐标系中各个关键帧到第0帧的相对位移
+        // Ps[i] == P_cl_ci，Rs[i] == R_cl_bi
         Ps[i] = s * Ps[i] - Rs[i] * TIC[0] - (s * Ps[0] - Rs[0] * TIC[0]);
+    }
     int kv = -1;
     map<double, ImageFrame>::iterator frame_i;
     for (frame_i = all_image_frame.begin(); frame_i != all_image_frame.end(); frame_i++)
     {
+        // 得到了以第L帧坐标系为世界坐标系，在IMU坐标系中各个关键帧的速度
         if (frame_i->second.is_key_frame)
         {
             kv++;
@@ -809,14 +819,17 @@ bool Estimator::visualInitialAlign()
         }
     }
 
+    // R0是指第L帧坐标系下的重力矢量与(0, 0, 9.81)的旋转偏差
     Matrix3d R0 = Utility::g2R(g);
     double yaw = Utility::R2ypr(R0 * Rs[0]).x();
+    // 这样做的目的是保证第一帧的偏航角为0
     R0 = Utility::ypr2R(Eigen::Vector3d{-yaw, 0, 0}) * R0;
     g = R0 * g;
     // Matrix3d rot_diff = R0 * Rs[0].transpose();
     Matrix3d rot_diff = R0;
     for (int i = 0; i <= frame_count; i++)
     {
+        // 通过第L帧，将位置旋转速度与世界坐标系对齐
         Ps[i] = rot_diff * Ps[i];
         Rs[i] = rot_diff * Rs[i];
         Vs[i] = rot_diff * Vs[i];
