@@ -430,7 +430,7 @@ int main(int argc, char **argv)
     // subscribe groundtruth，and align it with estimated pose.
     // ros::Subscriber sub_ground_truth = n.subscribe("/drone1/ground_truth/ground_truth_odom", 100, gt_pub_callback);
 
-    ros::Subscriber sub_mocap = n.subscribe("/mavros/position/pose", 100, mocap_callback);
+    ros::Subscriber sub_mocap = n.subscribe(MOCAP_TOPIC, 100, mocap_callback);
 
     std::thread sync_thread{sync_process};
     ros::spin();

@@ -31,6 +31,7 @@ std::string VINS_RESULT_PATH;
 std::string MOCAP_RESULT_PATH;
 std::string OUTPUT_FOLDER;
 std::string IMU_TOPIC;
+std::string MOCAP_TOPIC;
 int ROW, COL;
 double TD;
 int NUM_OF_CAM;
@@ -81,6 +82,7 @@ void readParameters(std::string config_file)
 
     fsSettings["image0_topic"] >> IMAGE0_TOPIC;
     fsSettings["image1_topic"] >> IMAGE1_TOPIC;
+    fsSettings["mocap_topic"] >> MOCAP_TOPIC;
     MAX_CNT = fsSettings["max_cnt"];
     MIN_DIST = fsSettings["min_dist"];
     F_THRESHOLD = fsSettings["F_threshold"];
