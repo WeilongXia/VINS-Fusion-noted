@@ -37,7 +37,10 @@ extern ros::Publisher pub_ref_pose, pub_cur_pose;
 extern ros::Publisher pub_key;
 extern nav_msgs::Path path;
 extern ros::Publisher pub_pose_graph;
-// extern ros::Publisher pub_ground_truth;
+
+extern ros::Publisher pub_ground_truth, pub_gt_path;
+extern nav_msgs::Path gt_path;
+
 extern int IMAGE_ROW, IMAGE_COL;
 
 void registerPub(ros::NodeHandle &n);
@@ -66,4 +69,4 @@ void pubRelocalization(const Estimator &estimator);
 
 void pubCar(const Estimator &estimator, const std_msgs::Header &header);
 
-// void pubGt(const nav_msgs::Odometry &ground_truth);
+void pubGt(const nav_msgs::Odometry &ground_truth);

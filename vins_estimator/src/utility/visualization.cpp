@@ -25,7 +25,8 @@ ros::Publisher pub_extrinsic;
 
 ros::Publisher pub_image_track;
 
-// ros::Publisher pub_ground_truth;
+nav_msgs::Path gt_path;
+ros::Publisher pub_ground_truth, pub_gt_path;
 
 CameraPoseVisualization cameraposevisual(1, 0, 0, 1);
 static double sum_of_path = 0;
@@ -47,7 +48,9 @@ void registerPub(ros::NodeHandle &n)
     pub_keyframe_point = n.advertise<sensor_msgs::PointCloud>("keyframe_point", 1000);
     pub_extrinsic = n.advertise<nav_msgs::Odometry>("extrinsic", 1000);
     pub_image_track = n.advertise<sensor_msgs::Image>("image_track", 1000);
-    // pub_ground_truth = n.advertise<nav_msgs::Odometry>("ground_truth", 1000);
+
+    pub_ground_truth = n.advertise<nav_msgs::Odometry>("ground_truth", 1000);
+    pub_gt_path = n.advertise<nav_msgs::Path>("gt_path", 1000);
 
     cameraposevisual.setScale(0.1);
     cameraposevisual.setLineWidth(0.01);
@@ -411,20 +414,27 @@ void pubKeyframe(const Estimator &estimator)
     }
 }
 
-// void pubGt(const nav_msgs::Odometry &ground_truth)
-// {
-//     nav_msgs::Odometry gt;
-//     gt.header.stamp = ros::Time::now();
-//     gt.header.frame_id = "world";
+void pubGt(const nav_msgs::Odometry &ground_truth)
+{
+    nav_msgs::Odometry gt;
+    gt.header.stamp = ros::Time::now();
+    gt.header.frame_id = "world";
 
-//     gt.pose.pose.position.x = ground_truth.pose.pose.position.x;
-//     gt.pose.pose.position.y = ground_truth.pose.pose.position.y;
-//     gt.pose.pose.position.z = ground_truth.pose.pose.position.z;
+    gt.pose.pose.position.x = ground_truth.pose.pose.position.x;
+    gt.pose.pose.position.y = ground_truth.pose.pose.position.y;
+    gt.pose.pose.position.z = ground_truth.pose.pose.position.z;
 
-//     gt.pose.pose.orientation.w = ground_truth.pose.pose.orientation.w;
-//     gt.pose.pose.orientation.x = ground_truth.pose.pose.orientation.x;
-//     gt.pose.pose.orientation.y = ground_truth.pose.pose.orientation.y;
-//     gt.pose.pose.orientation.z = ground_truth.pose.pose.orientation.z;
+    gt.pose.pose.orientation.w = ground_truth.pose.pose.orientation.w;
+    gt.pose.pose.orientation.x = ground_truth.pose.pose.orientation.x;
+    gt.pose.pose.orientation.y = ground_truth.pose.pose.orientation.y;
+    gt.pose.pose.orientation.z = ground_truth.pose.pose.orientation.z;
 
-//     pub_ground_truth.publish(gt);
-// }
+    pub_ground_truth.publish(gt);
+
+    geometry_msgs::PoseStamped pose_stamped;
+    pose_stamped.header = gt.header;
+    pose_stamped.pose = gt.pose.pose;
+    gt_path.header = gt.header;
+    gt_path.poses.push_back(pose_stamped);
+    pub_gt_path.publish(gt_path);
+}

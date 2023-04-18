@@ -108,11 +108,11 @@ void readParameters(std::string config_file)
     MIN_PARALLAX = MIN_PARALLAX / FOCAL_LENGTH;
 
     fsSettings["output_path"] >> OUTPUT_FOLDER;
-    VINS_RESULT_PATH = OUTPUT_FOLDER + "/vio.csv";
+    VINS_RESULT_PATH = OUTPUT_FOLDER + "/vio.txt";
     std::cout << "result path " << VINS_RESULT_PATH << std::endl;
     std::ofstream fout_vio(VINS_RESULT_PATH, std::ios::out);
     fout_vio.close();
-    MOCAP_RESULT_PATH = OUTPUT_FOLDER + "/mocap.csv";
+    MOCAP_RESULT_PATH = OUTPUT_FOLDER + "/mocap.txt";
     std::cout << "result_path: " << MOCAP_RESULT_PATH << std::endl;
     std::ofstream fout_mocap(MOCAP_RESULT_PATH, std::ios::out);
     fout_mocap.close();
