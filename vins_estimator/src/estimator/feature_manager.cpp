@@ -49,6 +49,13 @@ int FeatureManager::getFeatureCount()
 
 // frame_count: the index of current frame in the sliding window
 // image: features in current frame (featureId, cameraId, feature)
+/**
+ * @brief   把特征点放入feature的list容器中，计算每一个点跟踪次数和它在次新帧和次次新帧间的视差，返回是否是关键帧
+ * @param[in]   frame_count 窗口内帧的个数
+ * @param[in]   image 某帧所有特征点的[camera_id,[x,y,z,u,v,vx,vy]]s构成的map,索引为feature_id
+ * @param[in]   td IMU和cam同步时间差
+ * @return  bool true：次新帧是关键帧;false：非关键帧
+ */
 bool FeatureManager::addFeatureCheckParallax(int frame_count,
                                              const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image,
                                              double td)
@@ -61,26 +68,36 @@ bool FeatureManager::addFeatureCheckParallax(int frame_count,
     last_average_parallax = 0;
     new_feature_num = 0;
     long_track_num = 0;
+    //把image map中的所有特征点放入feature list容器中
     for (auto &id_pts : image)
     {
+        // id_pts.second[0].second即特征点在左目相机中的观测信息，[x, y, z, u, v, vx, vy]
+        // FeaturePerFrame是指某个特征点在单次相机中的观测
         FeaturePerFrame f_per_fra(id_pts.second[0].second, td);
+        // id_pts.second[0].first即左目相机的index，肯定为0
         assert(id_pts.second[0].first == 0);
+        // id_pts.second.size()即某个特征点同时被几个相机所观测到，如果是2，说明是双目相机，这时把右目相机的观测也添加到f_per_fra中
         if (id_pts.second.size() == 2)
         {
             f_per_fra.rightObservation(id_pts.second[1].second);
             assert(id_pts.second[1].first == 1);
         }
 
+        // 迭代器寻找feature list中是否有该feature_id
+        // FeaturePerId是指某个特征点在所有次相机中的观测，还包含特征点的一些其他信息如Id、观测起始帧、使用次数等
         int feature_id = id_pts.first;
         auto it = find_if(feature.begin(), feature.end(),
                           [feature_id](const FeaturePerId &it) { return it.feature_id == feature_id; });
 
+        // 如果没有则新建一个FeaturePerId，并添加该图像帧f_per_fra
         if (it == feature.end())
         {
+            // frame_count对应着FeaturePerId中的start_frame，也即观测起始帧
             feature.push_back(FeaturePerId(feature_id, frame_count));
             feature.back().feature_per_frame.push_back(f_per_fra);
             new_feature_num++;
         }
+        // 有的话把该图像帧也添加进去
         else if (it->feature_id == feature_id)
         {
             it->feature_per_frame.push_back(f_per_fra);
@@ -95,8 +112,11 @@ bool FeatureManager::addFeatureCheckParallax(int frame_count,
     if (frame_count < 2 || last_track_num < 20 || long_track_num < 40 || new_feature_num > 0.5 * last_track_num)
         return true;
 
+    // 计算每个特征点在次新帧和次次新帧中的视差
     for (auto &it_per_id : feature)
     {
+        // 假设滑窗大小为10，id从0到9，起始帧小于第8帧，并且能被第9帧所观测到
+        // 在特征点管理器feature中寻找能被第8帧和第9帧观察到的特征点
         if (it_per_id.start_frame <= frame_count - 2 &&
             it_per_id.start_frame + int(it_per_id.feature_per_frame.size()) - 1 >= frame_count - 1)
         {
@@ -111,6 +131,7 @@ bool FeatureManager::addFeatureCheckParallax(int frame_count,
     }
     else
     {
+        // 如果第8帧和第9帧的平均视差过大，则第9帧为关键帧
         ROS_DEBUG("parallax_sum: %lf, parallax_num: %d", parallax_sum, parallax_num);
         ROS_DEBUG("current parallax: %lf", parallax_sum / parallax_num * FOCAL_LENGTH);
         last_average_parallax = parallax_sum / parallax_num * FOCAL_LENGTH;
@@ -118,6 +139,7 @@ bool FeatureManager::addFeatureCheckParallax(int frame_count,
     }
 }
 
+// 得到frame_count_l与frame_count_r两帧之间的对应特征点
 vector<pair<Vector3d, Vector3d>> FeatureManager::getCorresponding(int frame_count_l, int frame_count_r)
 {
     vector<pair<Vector3d, Vector3d>> corres;

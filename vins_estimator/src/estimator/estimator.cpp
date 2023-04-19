@@ -439,12 +439,23 @@ void Estimator::processIMU(double t, double dt, const Vector3d &linear_accelerat
     gyr_0 = angular_velocity;
 }
 
+/**
+ * @brief   处理图像特征数据
+ * @Description addFeatureCheckParallax()添加特征点到feature中，计算点跟踪的次数和视差，判断是否是关键帧
+ *              判断并进行外参标定
+ *              进行视觉惯性联合初始化或基于滑动窗口非线性优化的紧耦合VIO
+ * @param[in]   image 某帧所有特征点的[camera_id,[x,y,z,u,v,vx,vy]]构成的map,索引为feature_id
+ * @param[in]   header 某帧图像的时间戳
+ * @return  void
+ */
 void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image, const double header)
 {
     ROS_DEBUG("new image coming ------------------------------------------");
     ROS_DEBUG("Adding feature points %lu", image.size());
     // check if there is enough parallax between current frame and second newest frame
     // if is, margin the oldest frame; if not, margin the second newest frame
+    // 添加之前检测到的特征点到feature容器中，计算每一个点跟踪的次数，以及它的视差
+    // 通过检测两帧之间的视差决定次新帧是否作为关键帧
     if (f_manager.addFeatureCheckParallax(frame_count, image, td))
     {
         marginalization_flag = MARGIN_OLD;
@@ -464,9 +475,11 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
     ImageFrame imageframe(image, header);
     // pre-integration of the current frame (IMU pre-integration between the
     // previous frame and the current frame)
+    // all_image_frame中含有所有图像（包括关键帧和非关键帧）的所有信息，包括特征点，旋转R，平移T，IMU预积分，是否是关键帧
     imageframe.pre_integration = tmp_pre_integration;
     all_image_frame.insert(make_pair(header, imageframe));
     // reset pre-integration
+    // 更新临时预积分初始值
     tmp_pre_integration = new IntegrationBase{acc_0, gyr_0, Bas[frame_count], Bgs[frame_count]};
 
     // calibrate rotation between the camera and imu online.
@@ -478,8 +491,10 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
         ROS_INFO("calibrating extrinsic param, rotation movement is needed");
         if (frame_count != 0)
         {
+            // 得到两帧之间归一化特征点
             vector<pair<Vector3d, Vector3d>> corres = f_manager.getCorresponding(frame_count - 1, frame_count);
             Matrix3d calib_ric;
+            // 标定从camera到IMU的旋转矩阵
             if (initial_ex_rotation.CalibrationExRotation(corres, pre_integrations[frame_count]->delta_q, calib_ric))
             {
                 ROS_WARN("initial extrinsic rotation calib success");
@@ -498,6 +513,8 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
         // monocular + IMU initilization
         if (!STEREO && USE_IMU)
         {
+            // frame_count是滑动窗口中图像帧的数量，一开始初始化为0，滑动窗口总帧数WINDOW_SIZE=10，
+            // 确保有足够的frame参与初始化
             if (frame_count == WINDOW_SIZE)
             {
                 bool result = false;
@@ -820,6 +837,7 @@ bool Estimator::visualInitialAlign()
     }
 
     // R0是指第L帧坐标系下的重力矢量与(0, 0, 9.81)的旋转偏差
+    // 通过将重力旋转到z轴上，得到世界坐标系与第L帧相机坐标系cl之间的旋转矩阵rot_diff
     Matrix3d R0 = Utility::g2R(g);
     double yaw = Utility::R2ypr(R0 * Rs[0]).x();
     // 这样做的目的是保证第一帧的偏航角为0
