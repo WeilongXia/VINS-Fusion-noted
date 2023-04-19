@@ -1,2 +1,2 @@
 # VINS-Fusion-noted
-A repository forked from HKUST-VINS_Fusion, but the noted version.
+A repository forked from HKUST-Aerial-Lab: VINS-Fusion, the noted version.
