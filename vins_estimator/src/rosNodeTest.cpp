@@ -118,6 +118,9 @@ void img1_callback(const sensor_msgs::ImageConstPtr &img_msg)
 cv::Mat getImageFromMsg(const sensor_msgs::ImageConstPtr &img_msg)
 {
     cv_bridge::CvImageConstPtr ptr;
+    // 将图像编码8UC1转换为mono8，这两种编码都表示8位单通道灰度图像
+    // 在ROS的sensor_msgs::Image消息中，通常使用8UC1作为图像编码
+    // 而在OpenCV库中，通常使用mono8作为图像编码
     if (img_msg->encoding == "8UC1")
     {
         sensor_msgs::Image img;
@@ -179,7 +182,10 @@ void sync_process()
             }
             m_buf.unlock();
             if (!image0.empty())
+            {
+                // inputImage()函数读取图像数据进行处理
                 estimator.inputImage(time, image0, image1);
+            }
         }
         else
         {

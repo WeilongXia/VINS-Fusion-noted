@@ -107,6 +107,7 @@ void Estimator::setParameter()
     td = TD;
     g = G;
     cout << "set g " << g.transpose() << endl;
+    // 读取相机内参和畸变参数
     featureTracker.readIntrinsicParameter(CAM_NAMES);
 
     std::cout << "MULTIPLE_THREAD is " << MULTIPLE_THREAD << '\n';
@@ -216,7 +217,9 @@ void Estimator::inputIMU(double t, const Vector3d &linearAcceleration, const Vec
     {
         mPropagate.lock();
         // use mid-point integration to predict pose and velocity.
+        // 递推得到IMU的PQV
         fastPredictIMU(t, linearAcceleration, angularVelocity);
+        // 发布最新的由IMU直接递推得到的PQV
         pubLatestOdometry(latest_P, latest_Q, latest_V, t);
         mPropagate.unlock();
     }
@@ -228,13 +231,16 @@ void Estimator::inputFeature(double t, const map<int, vector<pair<int, Eigen::Ma
     featureBuf.push(make_pair(t, featureFrame));
     mBuf.unlock();
 
-    // why not MULTIPLE_THREAD?
     if (!MULTIPLE_THREAD)
         processMeasurements();
 }
 
 // accVector contains linear acceleration between previous image and current image.
 // gyrVector contains angular velocity between previous image and current image.
+/**
+ * @brief   获得两个图像帧之间的IMU数据，用于后续IMU预积分
+ * @return      false: t1 <= accBuf.back().first,即imu数据没有图像数据新
+ */
 bool Estimator::getIMUInterval(double t0, double t1, vector<pair<double, Eigen::Vector3d>> &accVector,
                                vector<pair<double, Eigen::Vector3d>> &gyrVector)
 {
@@ -244,11 +250,12 @@ bool Estimator::getIMUInterval(double t0, double t1, vector<pair<double, Eigen::
         return false;
     }
     // printf("get imu from %f %f\n", t0, t1);
-    // printf("imu fornt time %f   imu end time %f\n", accBuf.front().first, accBuf.back().first);
+    // printf("imu front time %f   imu end time %f\n", accBuf.front().first, accBuf.back().first);
     if (t1 <= accBuf.back().first)
     {
         while (accBuf.front().first <= t0)
         {
+            // queue先进先出，弹出老的数据
             accBuf.pop();
             gyrBuf.pop();
         }
@@ -281,6 +288,14 @@ bool Estimator::IMUAvailable(double t)
         return false;
 }
 
+/**
+ * @brief   VIO的主线程
+ * @Description 等待并获取measurements：(IMUs, img_msg)s，计算dt
+ *              processIMU()进行IMU预积分
+ *              getIMUInterval()获得两个图像帧之间的IMU数据
+ *              processImage()处理图像帧：判断是否为关键帧，初始化，紧耦合的非线性优化
+ * @return      void
+ */
 void Estimator::processMeasurements()
 {
     while (1)
@@ -334,6 +349,7 @@ void Estimator::processMeasurements()
                         dt = curTime - accVector[i - 1].first;
                     else
                         dt = accVector[i].first - accVector[i - 1].first;
+                    // IMU预积分
                     processIMU(accVector[i].first, dt, accVector[i].second, gyrVector[i].second);
                 }
             }
@@ -400,6 +416,15 @@ void Estimator::initFirstPose(Eigen::Vector3d p, Eigen::Matrix3d r)
 // Using the pose of the previous image frame, the IMU data between the previous image frame
 // and the current image frame, the integral calculation is used to obtain the pose of the
 // current image frame.
+/**
+ * @brief   处理IMU数据
+ * @Description IMU预积分，中值积分得到当前PQV作为优化初值
+ * @param[in]   t 终止时刻
+ * @param[in]   dt 时间间隔
+ * @param[in]   linear_acceleration 线加速度
+ * @param[in]   angular_velocity 角速度
+ * @return  void
+ */
 void Estimator::processIMU(double t, double dt, const Vector3d &linear_acceleration, const Vector3d &angular_velocity)
 {
     if (!first_imu)
@@ -1650,6 +1675,8 @@ void Estimator::outliersRejection(set<int> &removeIndex)
     }
 }
 
+// 从IMU测量值linear_acceleration、angular_velocity和上一个PQV递推得到最新的
+// latest_P、latest_Q、latest_V，中值积分
 void Estimator::fastPredictIMU(double t, Eigen::Vector3d linear_acceleration, Eigen::Vector3d angular_velocity)
 {
     double dt = t - latest_time;
@@ -1667,6 +1694,8 @@ void Estimator::fastPredictIMU(double t, Eigen::Vector3d linear_acceleration, Ei
     latest_gyr_0 = angular_velocity;
 }
 
+// 从估计器中得到滑动窗口当前图像帧的imu更新项[P,Q,V,ba,bg,a,g]
+// 对accBuf和gyrBuf中剩余的acc和gyr进行PVQ递推
 void Estimator::updateLatestStates()
 {
     mPropagate.lock();

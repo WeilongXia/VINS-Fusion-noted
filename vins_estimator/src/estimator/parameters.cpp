@@ -74,7 +74,7 @@ void readParameters(std::string config_file)
     }
     fclose(fh);
 
-    cv::FileStorage fsSettings(config_file, cv::FileStorage::READ);
+    cv::FileStorage fsSettings(config_file, cv::FileStorage::READ); // 只读模式
     if (!fsSettings.isOpened())
     {
         std::cerr << "ERROR: Wrong path to settings" << std::endl;
