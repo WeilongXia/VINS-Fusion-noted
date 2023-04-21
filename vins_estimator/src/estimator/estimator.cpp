@@ -427,6 +427,7 @@ void Estimator::initFirstPose(Eigen::Vector3d p, Eigen::Matrix3d r)
  */
 void Estimator::processIMU(double t, double dt, const Vector3d &linear_acceleration, const Vector3d &angular_velocity)
 {
+    // 判断是否是第1个IMU消息
     if (!first_imu)
     {
         first_imu = true;
@@ -434,6 +435,8 @@ void Estimator::processIMU(double t, double dt, const Vector3d &linear_accelerat
         gyr_0 = angular_velocity;
     }
 
+    // 判断是否分配内存
+    // 注意：frame_count是从0累加到10的，所以刚开始要给pre_integrations[0~10]分配内存
     if (!pre_integrations[frame_count])
     {
         // create a new pre-integration object
@@ -441,15 +444,19 @@ void Estimator::processIMU(double t, double dt, const Vector3d &linear_accelerat
     }
     if (frame_count != 0)
     {
+        // 把IMU数据push到pre_integrations和tmp_pre_integration中，计算IMU预积分
+        // 注意：pre_integrations代表了滑动窗口中的关键帧。而tmp_pre_integration代表了每一个帧（包括关键帧和非关键帧）
         // pre_integration has been done during push_back
         pre_integrations[frame_count]->push_back(dt, linear_acceleration, angular_velocity);
         // if(solver_flag != NON_LINEAR)
         tmp_pre_integration->push_back(dt, linear_acceleration, angular_velocity);
 
+        // 把IMU数据保存到buf中
         dt_buf[frame_count].push_back(dt);
         linear_acceleration_buf[frame_count].push_back(linear_acceleration);
         angular_velocity_buf[frame_count].push_back(angular_velocity);
 
+        // 中值积分，预测最新帧的位姿，作为视觉的初始值
         int j = frame_count;
         Vector3d un_acc_0 = Rs[j] * (acc_0 - Bas[j]) - g;
         Vector3d un_gyr = 0.5 * (gyr_0 + angular_velocity) - Bgs[j];

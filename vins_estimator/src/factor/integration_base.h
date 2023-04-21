@@ -23,6 +23,7 @@ class IntegrationBase
 {
   public:
     IntegrationBase() = delete;
+    // delta_p,delta_v,delta_q会初始化为0和单位阵
     IntegrationBase(const Eigen::Vector3d &_acc_0, const Eigen::Vector3d &_gyr_0, const Eigen::Vector3d &_linearized_ba,
                     const Eigen::Vector3d &_linearized_bg)
         : acc_0{_acc_0}, gyr_0{_gyr_0}, linearized_acc{_acc_0}, linearized_gyr{_gyr_0}, linearized_ba{_linearized_ba},
@@ -45,6 +46,7 @@ class IntegrationBase
         dt_buf.push_back(dt);
         acc_buf.push_back(acc);
         gyr_buf.push_back(gyr);
+        // 将IMU数据存到Buf中，目的是为了，当得到偏差的更新时，重新计算IMU预积分
         propagate(dt, acc, gyr);
     }
 
@@ -92,6 +94,8 @@ class IntegrationBase
 
         // calculate the Jacobian matrix of the current error-state respect to the previous error-state
         // calculate the Jacobian matrix of the current error-state respect to the noise (current and previous)
+        // J_{k+1} = F * J_k，J_k初始值为Identity(15, 15)
+        // P_{k+1} = F * P_k * F^T + V * Q * V^T，P_k初始值为Zero(15, 15)
         if (update_jacobian)
         {
             Vector3d w_x = 0.5 * (_gyr_0 + _gyr_1) - linearized_bg;
@@ -100,10 +104,17 @@ class IntegrationBase
             Matrix3d R_w_x, R_a_0_x, R_a_1_x;
 
             // 反对称矩阵
-            R_w_x << 0, -w_x(2), w_x(1), w_x(2), 0, -w_x(0), -w_x(1), w_x(0), 0;
-            R_a_0_x << 0, -a_0_x(2), a_0_x(1), a_0_x(2), 0, -a_0_x(0), -a_0_x(1), a_0_x(0), 0;
-            R_a_1_x << 0, -a_1_x(2), a_1_x(1), a_1_x(2), 0, -a_1_x(0), -a_1_x(1), a_1_x(0), 0;
+            R_w_x << 0, -w_x(2), w_x(1), //
+                w_x(2), 0, -w_x(0),      //
+                -w_x(1), w_x(0), 0;
+            R_a_0_x << 0, -a_0_x(2), a_0_x(1), //
+                a_0_x(2), 0, -a_0_x(0),        //
+                -a_0_x(1), a_0_x(0), 0;
+            R_a_1_x << 0, -a_1_x(2), a_1_x(1), //
+                a_1_x(2), 0, -a_1_x(0),        //
+                -a_1_x(1), a_1_x(0), 0;
 
+            // 当前时刻误差传递给下一时刻
             MatrixXd F = MatrixXd::Zero(15, 15);
             F.block<3, 3>(0, 0) = Matrix3d::Identity();
             F.block<3, 3>(0, 3) =
@@ -124,6 +135,7 @@ class IntegrationBase
             F.block<3, 3>(12, 12) = Matrix3d::Identity();
             // cout<<"A"<<endl<<A<<endl;
 
+            // 当前时刻测量噪声传递给下一时刻
             MatrixXd V = MatrixXd::Zero(15, 18);
             V.block<3, 3>(0, 0) = 0.25 * delta_q.toRotationMatrix() * _dt * _dt;
             V.block<3, 3>(0, 3) = 0.25 * -result_delta_q.toRotationMatrix() * R_a_1_x * _dt * _dt * 0.5 * _dt;
@@ -173,19 +185,24 @@ class IntegrationBase
 
         // calculate the delta-state at current moment by the delta-state at the previous moment,
         // where Ba and Bg remain unchanged.
+        // 进行IMU预积分计算
         midPointIntegration(_dt, acc_0, gyr_0, _acc_1, _gyr_1, delta_p, delta_q, delta_v, linearized_ba, linearized_bg,
                             result_delta_p, result_delta_q, result_delta_v, result_linearized_ba, result_linearized_bg,
                             1);
 
         // checkJacobian(_dt, acc_0, gyr_0, acc_1, gyr_1, delta_p, delta_q, delta_v,
         //                    linearized_ba, linearized_bg);
+        // delta_p, delta_q, delta_v是当前帧相对于上一帧（图像）的IMU位置、角度、速度增量（不是物理意义上的）
+        // 更新PVQ
         delta_p = result_delta_p;
         delta_q = result_delta_q;
         delta_v = result_delta_v;
+        // 更新加速度和角速度偏差
         linearized_ba = result_linearized_ba;
         linearized_bg = result_linearized_bg;
         delta_q.normalize();
         sum_dt += dt;
+        // 预积分完成之后，更新一下加速度和角速度的初始值
         acc_0 = acc_1;
         gyr_0 = gyr_1;
     }
