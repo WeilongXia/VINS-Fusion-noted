@@ -24,8 +24,8 @@ using namespace std;
 
 struct SFMFeature
 {
-    bool state;
-    int id;
+    bool state; // 特征点状态，有没有被成功三角化
+    int id;     // 特征点ID
     vector<pair<int, Vector2d>> observation;
     double position[3];
     double depth;
