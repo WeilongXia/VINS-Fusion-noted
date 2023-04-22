@@ -435,6 +435,7 @@ void FeatureManager::triangulate(int frameCnt, Vector3d Ps[], Matrix3d Rs[], Vec
                 continue;
         }
         ROS_ASSERT(svd_idx == svd_A.rows());
+        // 方程的解为svd_A的最小奇异值对应的单位奇异矢量
         Eigen::Vector4d svd_V = Eigen::JacobiSVD<Eigen::MatrixXd>(svd_A, Eigen::ComputeThinV).matrixV().rightCols<1>();
         double svd_method = svd_V[2] / svd_V[3];
         // it_per_id->estimated_depth = -b / A;
